@@ -17,7 +17,7 @@ public class CommentairesController : ControllerBase
     public CommentairesController(AppDbContext context, IHttpClientFactory httpClientFactory)
     {
         _context = context;
-        _httpClient = httpClientFactory.CreateClient("ProduitService");
+        _httpClient = httpClientFactory.CreateClient("produit-service");
     }
 
     // GET: api/commentaires
@@ -41,28 +41,46 @@ public class CommentairesController : ControllerBase
 
     // GET: api/commentaires/byProduit/{produitId}
     [HttpGet("byProduit/{produitId}")]
-    public async Task<ActionResult<IEnumerable<Commentaire>>> GetCommentairesByProduit(int produitId)
+    public async Task<ActionResult<object>> GetCommentairesByProduit(int produitId)
     {
+        var response = await _httpClient.GetAsync($"/api/Produits/{produitId}");
+
+        if (!response.IsSuccessStatusCode)
+            return BadRequest("Produit introuvable.");
+
+        var produitJson = await response.Content.ReadAsStringAsync();
+        var produitApiResponse = JsonSerializer.Deserialize<ProduitApiResponse>(produitJson, new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+
+        if (produitApiResponse == null || produitApiResponse.Produit == null)
+            return BadRequest("Produit introuvable.");
+
+        var produit = produitApiResponse.Produit;
+
+        // 🔥 Récupérer les commentaires
         var commentaires = await _context.Commentaires
             .Where(c => c.ProduitId == produitId)
             .ToListAsync();
 
-        return commentaires;
+        return Ok(new
+        {
+            Produit = produit,
+            Commentaires = commentaires
+        });
     }
 
     // POST: api/commentaires/{produitId}
     [HttpPost("{produitId}")]
     public async Task<IActionResult> CreateCommentaire(int produitId, CreateCommentaireDto dto)
     {
-        var response = await _httpClient.GetAsync($"http://localhost:5185/api/produits/{produitId}");
+        var response = await _httpClient.GetAsync($"/api/produits/{produitId}");
 
         if (!response.IsSuccessStatusCode)
             return BadRequest("Produit introuvable.");
 
         var produitJson = await response.Content.ReadAsStringAsync();
-        var produitApiResponse = System.Text.Json.JsonSerializer.Deserialize<ProduitApiResponse>(
+        var produitApiResponse = JsonSerializer.Deserialize<ProduitApiResponse>(
             produitJson,
-            new System.Text.Json.JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+            new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
 
         if (produitApiResponse == null || produitApiResponse.Produit == null || !produitApiResponse.Produit.Notable)
             return BadRequest("Impossible d'ajouter un commentaire à un produit non notable.");

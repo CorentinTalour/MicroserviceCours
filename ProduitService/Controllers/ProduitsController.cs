@@ -1,3 +1,4 @@
+using System.Text.Json;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using WebApplication1.Data;
@@ -16,7 +17,7 @@ public class ProduitsController : ControllerBase
     public ProduitsController(AppDbContext context, IHttpClientFactory httpClientFactory)
     {
         _context = context;
-        _httpClient = httpClientFactory.CreateClient("CommentaireService");
+        _httpClient = httpClientFactory.CreateClient("commentaire-service");
     }
 
     // GET: api/produits
@@ -25,7 +26,7 @@ public class ProduitsController : ControllerBase
     {
         return await _context.Produits.ToListAsync();
     }
-
+    
     // GET: api/produits/{id} avec commentaires
     [HttpGet("{id}")]
     public async Task<ActionResult<object>> GetProduit(int id)
@@ -35,13 +36,33 @@ public class ProduitsController : ControllerBase
         if (produit == null)
             return NotFound();
 
-        var response = await _httpClient.GetAsync($"/api/commentaires/byProduit/{id}");
+        return Ok(new
+        {
+            Produit = produit
+        });
+    }
+
+    // GET: api/produits/{id} avec commentaires
+    [HttpGet("withComments/{id}")]
+    public async Task<ActionResult<object>> GetProduitWithComments(int id)
+    {
+        var produit = await _context.Produits.FindAsync(id);
+
+        if (produit == null)
+            return NotFound();
+
+        var response = await _httpClient.GetAsync($"api/commentaires/byProduit/{id}");
+
         List<CommentaireDto> commentaires = new();
 
         if (response.IsSuccessStatusCode)
         {
             var json = await response.Content.ReadAsStringAsync();
-            commentaires = System.Text.Json.JsonSerializer.Deserialize<List<CommentaireDto>>(json, new System.Text.Json.JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+
+            var commentaireResponse = JsonSerializer.Deserialize<CommentaireResponse>(json, new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+
+            if (commentaireResponse != null)
+                commentaires = commentaireResponse.Commentaires;
         }
 
         return Ok(new
