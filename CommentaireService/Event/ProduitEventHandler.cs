@@ -22,9 +22,8 @@ public class ProduitEventHandler
     [RabbitListener(Binding = "ProduitDeletedBinding")]
     public void On(ProduitDeletedEvent message)
     {
-        Console.WriteLine($"✅ Produit supprimé reçu : {message.Id}");
+        Console.WriteLine($"Produit supprimé reçu : {message.Id}");
 
-        // Créer un scope manuellement
         using (var scope = _scopeFactory.CreateScope())
         {
             var dbContext = scope.ServiceProvider.GetRequiredService<AppDbContext>();
