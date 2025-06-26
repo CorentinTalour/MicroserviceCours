@@ -1,9 +1,12 @@
 using CommentaireService.Data;
+using CommentaireService.Event;
 using Microsoft.EntityFrameworkCore;
 using Polly;
-using Steeltoe.Common.Http.Discovery;
+using Steeltoe.Connector.RabbitMQ;
 using Steeltoe.Discovery.Client;
 using Steeltoe.Discovery.Eureka;
+using Steeltoe.Messaging.RabbitMQ.Config;
+using Steeltoe.Messaging.RabbitMQ.Extensions;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -34,6 +37,15 @@ builder.Services.AddHttpClient("produit-service", client =>
         Console.WriteLine("Circuit à moitié ouvert, test en cours...");
     }))
 .AddPolicyHandler(Policy.BulkheadAsync<HttpResponseMessage>(maxParallelization: 5, maxQueuingActions: 10));
+
+builder.Services.AddRabbitMQConnection(builder.Configuration);
+builder.Services.AddRabbitServices(true);
+builder.Services.AddRabbitAdmin();
+builder.Services.AddRabbitTemplate();
+
+builder.Services.AddSingleton<ProduitEventHandler>();
+builder.Services.AddRabbitListeners<ProduitEventHandler>();
+builder.Services.AddRabbitExchange("ms.produit", ExchangeType.TOPIC);
 
 // Configuration du client HTTP pour le service Produit
 //builder.Services.AddHttpClient("ProduitService")

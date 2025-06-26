@@ -1,8 +1,13 @@
 using Microsoft.EntityFrameworkCore;
 using Polly;
+using Steeltoe.Common.Http.Discovery;
+using Steeltoe.Connector.RabbitMQ;
 using Steeltoe.Discovery.Client;
 using Steeltoe.Discovery.Eureka;
+using Steeltoe.Messaging.RabbitMQ.Config;
+using Steeltoe.Messaging.RabbitMQ.Extensions;
 using WebApplication1.Data;
+using WebApplication1.Event;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -18,9 +23,8 @@ builder.Services.AddDiscoveryClient(builder.Configuration);
 
 builder.Services.AddServiceDiscovery(options => options.UseEureka());
 
-builder.Services.AddHttpClient("commentaire-service", client => {
-    client.BaseAddress = new Uri("lb://commentaire-service/");
-}).AddRandomLoadBalancer()
+builder.Services.AddHttpClient("commentaire-service")
+    .AddServiceDiscovery()
     .AddTransientHttpErrorPolicy(policy => policy.CircuitBreakerAsync(3, TimeSpan.FromSeconds(5),
         onBreak: (result, timespan) => {
             Console.WriteLine($"Circuit ouvert pendant {timespan.TotalSeconds} secondes suite à : {result.Exception?.Message}");
@@ -32,6 +36,16 @@ builder.Services.AddHttpClient("commentaire-service", client => {
             Console.WriteLine("Circuit à moitié ouvert, test en cours...");
         }))
     .AddPolicyHandler(Policy.BulkheadAsync<HttpResponseMessage>(maxParallelization: 5, maxQueuingActions: 10));
+
+builder.Services.AddRabbitMQConnection(builder.Configuration);
+builder.Services.AddRabbitServices(true);
+builder.Services.AddRabbitAdmin();
+builder.Services.AddRabbitTemplate();
+
+builder.Services.AddSingleton<CustomEventHandler>();
+builder.Services.AddRabbitListeners<CustomEventHandler>();
+
+builder.Services.AddRabbitExchange("ms.produit", ExchangeType.TOPIC);
 
 // Configuration du client HTTP pour le service Commentaire
 //builder.Services.AddHttpClient("CommentaireService")

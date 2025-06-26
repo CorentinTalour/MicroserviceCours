@@ -3,8 +3,10 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Polly;
 using Polly.CircuitBreaker;
+using Steeltoe.Messaging.RabbitMQ.Core;
 using WebApplication1.Data;
 using WebApplication1.Dtos;
+using WebApplication1.Event;
 using WebApplication1.Models;
 
 namespace WebApplication1.Controllers;
@@ -15,11 +17,13 @@ public class ProduitsController : ControllerBase
 {
     private readonly AppDbContext _context;
     private readonly HttpClient _httpClient;
+    private readonly RabbitTemplate _rabbitTemplate;
 
-    public ProduitsController(AppDbContext context, IHttpClientFactory httpClientFactory)
+    public ProduitsController(AppDbContext context, IHttpClientFactory httpClientFactory, RabbitTemplate rabbitTemplate)
     {
         _context = context;
         _httpClient = httpClientFactory.CreateClient("commentaire-service");
+        _rabbitTemplate = rabbitTemplate;
     }
 
     // GET: api/produits
@@ -72,7 +76,7 @@ public class ProduitsController : ControllerBase
 
         var commentaires = await fallbackPolicy.ExecuteAsync(async () =>
         {
-            var response = await _httpClient.GetAsync($"api/commentaires/byProduit/{id}");
+            var response = await _httpClient.GetAsync($"http://commentaire-service/api/commentaires/byProduit/{id}");
 
             if (response.IsSuccessStatusCode)
             {
@@ -95,13 +99,25 @@ public class ProduitsController : ControllerBase
         });
     }
 
-    // POST: api/produits
+// POST: api/produits
     [HttpPost]
     public async Task<ActionResult<Produit>> CreateProduit(Produit produit)
     {
         _context.Produits.Add(produit);
         await _context.SaveChangesAsync();
 
+        // Envoi de l'évènement RabbitMQ ici
+        var message = new ProduitCreatedEvent
+        {
+            Id = produit.Id,
+            Nom = produit.Nom,
+            Prix = produit.Prix,
+            Notable = produit.Notable,
+            Source = "ProduitService"
+        };
+
+        _rabbitTemplate.ConvertAndSend("ms.produit", "produit.creation", message);
+        
         return CreatedAtAction(nameof(GetProduit), new { id = produit.Id }, produit);
     }
 
@@ -126,54 +142,82 @@ public class ProduitsController : ControllerBase
         return NoContent();
     }
 
-    // DELETE: api/produits/{id} avec Fallback
-    [HttpDelete("{id}")]
-    public async Task<IActionResult> DeleteProduit(int id)
+    // DELETE: api/produits/{id}
+[HttpDelete("{id}")]
+public async Task<IActionResult> DeleteProduit(int id)
+{
+    var produit = await _context.Produits.FindAsync(id);
+
+    if (produit == null)
+        return NotFound();
+
+    // Fallback policy avec meilleure gestion des erreurs
+    var fallbackPolicy = Policy<List<CommentaireDto>>
+        .Handle<HttpRequestException>()
+        .Or<TaskCanceledException>()
+        .Or<BrokenCircuitException>()
+        .Or<JsonException>()
+        .FallbackAsync(
+            fallbackAction: (delegateResult, context, cancellationToken) =>
+            {
+                Console.WriteLine($"Fallback déclenché (DELETE) pour le produit {id} : {delegateResult.Exception?.Message}");
+                return Task.FromResult(new List<CommentaireDto>());
+            },
+            onFallbackAsync: (delegateResult, context) =>
+            {
+                Console.WriteLine($"⚡ Fallback activé (DELETE) pour le produit {id}");
+                return Task.CompletedTask;
+            });
+
+    var commentaires = await fallbackPolicy.ExecuteAsync(async () =>
     {
-        var produit = await _context.Produits.FindAsync(id);
-
-        if (produit == null)
-            return NotFound();
-
-        // Fallback policy
-        var fallbackPolicy = Policy<List<CommentaireDto>>
-            .Handle<HttpRequestException>()
-            .Or<TaskCanceledException>()
-            .Or<BrokenCircuitException>()
-            .FallbackAsync(
-                fallbackAction: (delegateResult, context, cancellationToken) =>
-                {
-                    Console.WriteLine($"Fallback déclenché (DELETE) pour le produit {id} : {delegateResult.Exception?.Message}");
-                    return Task.FromResult(new List<CommentaireDto>());
-                },
-                onFallbackAsync: (delegateResult, context) =>
-                {
-                    Console.WriteLine($"⚡ Fallback activé (DELETE) pour le produit {id}");
-                    return Task.CompletedTask;
-                });
-
-        var commentaires = await fallbackPolicy.ExecuteAsync(async () =>
+        try
         {
-            var response = await _httpClient.GetAsync($"/api/commentaires/byProduit/{id}");
+            var response = await _httpClient.GetAsync($"http://commentaire-service/api/commentaires/byProduit/{id}");
 
-            if (response.IsSuccessStatusCode)
+            // Vérifier d'abord si le statut est OK
+            if (!response.IsSuccessStatusCode)
             {
-                var json = await response.Content.ReadAsStringAsync();
-                var commentaires = JsonSerializer.Deserialize<List<CommentaireDto>>(json, new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
-                return commentaires ?? new List<CommentaireDto>();
-            }
-            else
-            {
+                Console.WriteLine($"Service commentaire a répondu avec statut {response.StatusCode}");
                 return new List<CommentaireDto>();
             }
-        });
+            
+            // Vérifier que le content-type est bien du JSON
+            var contentType = response.Content.Headers.ContentType?.MediaType;
+            if (contentType == null || !contentType.Contains("application/json"))
+            {
+                Console.WriteLine($"La réponse n'est pas en JSON: {contentType}");
+                return new List<CommentaireDto>();
+            }
 
-        if (commentaires.Any())
-            return BadRequest("Impossible de supprimer ce produit car des commentaires existent.");
+            var json = await response.Content.ReadAsStringAsync();
+            
+            // Vérifier que le JSON n'est pas vide
+            if (string.IsNullOrWhiteSpace(json))
+            {
+                Console.WriteLine("La réponse JSON est vide");
+                return new List<CommentaireDto>();
+            }
+            
+            var commentaireResponse = JsonSerializer.Deserialize<CommentaireResponse>(json, 
+                new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
 
-        _context.Produits.Remove(produit);
-        await _context.SaveChangesAsync();
+            return commentaireResponse?.Commentaires ?? new List<CommentaireDto>();
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Erreur lors de l'appel au service commentaire: {ex.Message}");
+            throw;
+        }
+    });
 
-        return NoContent();
+    _context.Produits.Remove(produit);
+    await _context.SaveChangesAsync();
+    
+    // Envoi du message RabbitMQ pour la suppression du produit
+    var message = new ProduitDeletedEvent { Id = produit.Id };
+    _rabbitTemplate.ConvertAndSend("ms.produit", "produit.deleted", message);
+    
+    return NoContent();
     }
 }
