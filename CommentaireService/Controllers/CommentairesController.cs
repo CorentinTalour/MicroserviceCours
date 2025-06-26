@@ -4,6 +4,8 @@ using CommentaireService.Dtos;
 using CommentaireService.Models;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using Polly;
+using Polly.CircuitBreaker;
 
 namespace CommentaireService.Controllers;
 
@@ -39,53 +41,126 @@ public class CommentairesController : ControllerBase
         return Ok(commentaire);
     }
 
-    // GET: api/commentaires/byProduit/{produitId}
+    // GET: api/commentaires/byProduit/{produitId} avec Fallback sécurisé
     [HttpGet("byProduit/{produitId}")]
     public async Task<ActionResult<object>> GetCommentairesByProduit(int produitId)
     {
-        var response = await _httpClient.GetAsync($"/api/Produits/{produitId}");
+        var fallbackPolicy = Policy<ProduitApiResponse?>
+            .Handle<HttpRequestException>()
+            .Or<TaskCanceledException>()
+            .Or<BrokenCircuitException>()
+            .Or<JsonException>()
+            .FallbackAsync(
+                fallbackAction: (delegateResult, context, cancellationToken) =>
+                {
+                    Console.WriteLine($"Fallback déclenché pour GetCommentairesByProduit {produitId}: {delegateResult.Exception?.Message}");
+                    return Task.FromResult<ProduitApiResponse?>(null);
+                },
+                onFallbackAsync: (delegateResult, context) =>
+                {
+                    Console.WriteLine($"Fallback activé pour GetCommentairesByProduit {produitId}");
+                    return Task.CompletedTask;
+                });
 
-        if (!response.IsSuccessStatusCode)
-            return BadRequest("Produit introuvable.");
+        var produitApiResponse = await fallbackPolicy.ExecuteAsync(async () =>
+        {
+            var response = await _httpClient.GetAsync($"/api/Produits/{produitId}");
 
-        var produitJson = await response.Content.ReadAsStringAsync();
-        var produitApiResponse = JsonSerializer.Deserialize<ProduitApiResponse>(produitJson, new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+            if (!response.IsSuccessStatusCode)
+            {
+                throw new HttpRequestException($"Erreur HTTP: {response.StatusCode}");
+            }
 
-        if (produitApiResponse == null || produitApiResponse.Produit == null)
-            return BadRequest("Produit introuvable.");
+            if (!response.Content.Headers.ContentType?.MediaType.Contains("application/json") == true)
+            {
+                throw new JsonException("Contenu non JSON retourné.");
+            }
 
-        var produit = produitApiResponse.Produit;
+            var produitJson = await response.Content.ReadAsStringAsync();
 
-        // 🔥 Récupérer les commentaires
+            try
+            {
+                return JsonSerializer.Deserialize<ProduitApiResponse>(produitJson, new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+            }
+            catch (JsonException)
+            {
+                throw new JsonException($"Erreur de parsing JSON. Contenu reçu : {produitJson}");
+            }
+        });
+
         var commentaires = await _context.Commentaires
             .Where(c => c.ProduitId == produitId)
             .ToListAsync();
 
+        if (produitApiResponse == null || produitApiResponse.Produit == null)
+        {
+            return Ok(new
+            {
+                Produit = (object?)null,
+                Commentaires = commentaires,
+            });
+        }
+
         return Ok(new
         {
-            Produit = produit,
+            Produit = produitApiResponse.Produit,
             Commentaires = commentaires
         });
     }
 
-    // POST: api/commentaires/{produitId}
+    // POST: api/commentaires/{produitId} avec Fallback sécurisé
     [HttpPost("{produitId}")]
     public async Task<IActionResult> CreateCommentaire(int produitId, CreateCommentaireDto dto)
     {
-        var response = await _httpClient.GetAsync($"/api/produits/{produitId}");
+        var fallbackPolicy = Policy<ProduitApiResponse?>
+            .Handle<HttpRequestException>()
+            .Or<TaskCanceledException>()
+            .Or<BrokenCircuitException>()
+            .Or<JsonException>()
+            .FallbackAsync(
+                fallbackAction: (delegateResult, context, cancellationToken) =>
+                {
+                    Console.WriteLine($"⚡ Fallback déclenché pour CreateCommentaire {produitId}: {delegateResult.Exception?.Message}");
+                    return Task.FromResult<ProduitApiResponse?>(null);
+                },
+                onFallbackAsync: (delegateResult, context) =>
+                {
+                    Console.WriteLine($"🚨 Fallback activé pour CreateCommentaire {produitId}");
+                    return Task.CompletedTask;
+                });
 
-        if (!response.IsSuccessStatusCode)
-            return BadRequest("Produit introuvable.");
+        var produitApiResponse = await fallbackPolicy.ExecuteAsync(async () =>
+        {
+            var response = await _httpClient.GetAsync($"/api/Produits/{produitId}");
 
-        var produitJson = await response.Content.ReadAsStringAsync();
-        var produitApiResponse = JsonSerializer.Deserialize<ProduitApiResponse>(
-            produitJson,
-            new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+            if (!response.IsSuccessStatusCode)
+            {
+                throw new HttpRequestException($"Erreur HTTP: {response.StatusCode}");
+            }
 
-        if (produitApiResponse == null || produitApiResponse.Produit == null || !produitApiResponse.Produit.Notable)
+            if (!response.Content.Headers.ContentType?.MediaType.Contains("application/json") == true)
+            {
+                throw new JsonException("Contenu non JSON retourné.");
+            }
+
+            var produitJson = await response.Content.ReadAsStringAsync();
+
+            try
+            {
+                return JsonSerializer.Deserialize<ProduitApiResponse>(produitJson, new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+            }
+            catch (JsonException)
+            {
+                throw new JsonException($"Erreur de parsing JSON. Contenu reçu : {produitJson}");
+            }
+        });
+
+        if (produitApiResponse == null || produitApiResponse.Produit == null)
+            return BadRequest("Service produit indisponible ou produit introuvable.");
+
+        if (!produitApiResponse.Produit.Notable)
             return BadRequest("Impossible d'ajouter un commentaire à un produit non notable.");
 
-        // Calcul de la note moyenne
         double noteMoyenne = (dto.QualiteProduit + dto.RapportQualitePrix + dto.FaculteUtilisation) / 3.0;
 
         var commentaire = new Commentaire

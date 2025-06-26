@@ -1,6 +1,8 @@
 using System.Text.Json;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using Polly;
+using Polly.CircuitBreaker;
 using WebApplication1.Data;
 using WebApplication1.Dtos;
 using WebApplication1.Models;
@@ -26,8 +28,8 @@ public class ProduitsController : ControllerBase
     {
         return await _context.Produits.ToListAsync();
     }
-    
-    // GET: api/produits/{id} avec commentaires
+
+    // GET: api/produits/{id}
     [HttpGet("{id}")]
     public async Task<ActionResult<object>> GetProduit(int id)
     {
@@ -42,7 +44,7 @@ public class ProduitsController : ControllerBase
         });
     }
 
-    // GET: api/produits/{id} avec commentaires
+    // GET: api/produits/withComments/{id} avec Fallback
     [HttpGet("withComments/{id}")]
     public async Task<ActionResult<object>> GetProduitWithComments(int id)
     {
@@ -51,19 +53,40 @@ public class ProduitsController : ControllerBase
         if (produit == null)
             return NotFound();
 
-        var response = await _httpClient.GetAsync($"api/commentaires/byProduit/{id}");
+        // Fallback policy
+        var fallbackPolicy = Policy<List<CommentaireDto>>
+            .Handle<HttpRequestException>()
+            .Or<TaskCanceledException>()
+            .Or<BrokenCircuitException>()
+            .FallbackAsync(
+                fallbackAction: (delegateResult, context, cancellationToken) =>
+                {
+                    Console.WriteLine($"Fallback déclenché pour le produit {id} : {delegateResult.Exception?.Message}");
+                    return Task.FromResult(new List<CommentaireDto>());
+                },
+                onFallbackAsync: (delegateResult, context) =>
+                {
+                    Console.WriteLine($"⚡ Fallback activé pour le produit {id}");
+                    return Task.CompletedTask;
+                });
 
-        List<CommentaireDto> commentaires = new();
-
-        if (response.IsSuccessStatusCode)
+        var commentaires = await fallbackPolicy.ExecuteAsync(async () =>
         {
-            var json = await response.Content.ReadAsStringAsync();
+            var response = await _httpClient.GetAsync($"api/commentaires/byProduit/{id}");
 
-            var commentaireResponse = JsonSerializer.Deserialize<CommentaireResponse>(json, new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+            if (response.IsSuccessStatusCode)
+            {
+                var json = await response.Content.ReadAsStringAsync();
+                var commentaireResponse = JsonSerializer.Deserialize<CommentaireResponse>(json, new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
 
-            if (commentaireResponse != null)
-                commentaires = commentaireResponse.Commentaires;
-        }
+                return commentaireResponse?.Commentaires ?? new List<CommentaireDto>();
+            }
+            else
+            {
+                // Si le service retourne une erreur HTTP, on retourne une liste vide (sans déclencher le fallback)
+                return new List<CommentaireDto>();
+            }
+        });
 
         return Ok(new
         {
@@ -103,7 +126,7 @@ public class ProduitsController : ControllerBase
         return NoContent();
     }
 
-    // DELETE: api/produits/{id}
+    // DELETE: api/produits/{id} avec Fallback
     [HttpDelete("{id}")]
     public async Task<IActionResult> DeleteProduit(int id)
     {
@@ -112,16 +135,41 @@ public class ProduitsController : ControllerBase
         if (produit == null)
             return NotFound();
 
-        var response = await _httpClient.GetAsync($"/api/commentaires/byProduit/{id}");
+        // Fallback policy
+        var fallbackPolicy = Policy<List<CommentaireDto>>
+            .Handle<HttpRequestException>()
+            .Or<TaskCanceledException>()
+            .Or<BrokenCircuitException>()
+            .FallbackAsync(
+                fallbackAction: (delegateResult, context, cancellationToken) =>
+                {
+                    Console.WriteLine($"Fallback déclenché (DELETE) pour le produit {id} : {delegateResult.Exception?.Message}");
+                    return Task.FromResult(new List<CommentaireDto>());
+                },
+                onFallbackAsync: (delegateResult, context) =>
+                {
+                    Console.WriteLine($"⚡ Fallback activé (DELETE) pour le produit {id}");
+                    return Task.CompletedTask;
+                });
 
-        if (response.IsSuccessStatusCode)
+        var commentaires = await fallbackPolicy.ExecuteAsync(async () =>
         {
-            var json = await response.Content.ReadAsStringAsync();
-            var commentaires = System.Text.Json.JsonSerializer.Deserialize<List<CommentaireDto>>(json, new System.Text.Json.JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+            var response = await _httpClient.GetAsync($"/api/commentaires/byProduit/{id}");
 
-            if (commentaires != null && commentaires.Any())
-                return BadRequest("Impossible de supprimer ce produit car des commentaires existent.");
-        }
+            if (response.IsSuccessStatusCode)
+            {
+                var json = await response.Content.ReadAsStringAsync();
+                var commentaires = JsonSerializer.Deserialize<List<CommentaireDto>>(json, new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+                return commentaires ?? new List<CommentaireDto>();
+            }
+            else
+            {
+                return new List<CommentaireDto>();
+            }
+        });
+
+        if (commentaires.Any())
+            return BadRequest("Impossible de supprimer ce produit car des commentaires existent.");
 
         _context.Produits.Remove(produit);
         await _context.SaveChangesAsync();

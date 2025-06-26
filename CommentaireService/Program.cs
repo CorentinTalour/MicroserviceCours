@@ -1,5 +1,6 @@
 using CommentaireService.Data;
 using Microsoft.EntityFrameworkCore;
+using Polly;
 using Steeltoe.Common.Http.Discovery;
 using Steeltoe.Discovery.Client;
 using Steeltoe.Discovery.Eureka;
@@ -16,13 +17,23 @@ builder.Services.AddDbContext<AppDbContext>(options =>
 
 builder.Services.AddDiscoveryClient(builder.Configuration);
 
-builder.Services.AddDiscoveryClient(builder.Configuration);
-
 builder.Services.AddServiceDiscovery(options => options.UseEureka());
 
-builder.Services.AddHttpClient("produit-service", client => {
+builder.Services.AddHttpClient("produit-service", client =>
+{
     client.BaseAddress = new Uri("lb://produit-service/");
-}).AddRandomLoadBalancer();
+}).AddRandomLoadBalancer()    
+    .AddTransientHttpErrorPolicy(policy => policy.CircuitBreakerAsync(3, TimeSpan.FromSeconds(5),
+    onBreak: (result, timespan) => {
+        Console.WriteLine($"Circuit ouvert pendant {timespan.TotalSeconds} secondes suite à : {result.Exception?.Message}");
+    },
+    onReset: () => {
+        Console.WriteLine("Circuit fermé, tout est rétabli.");
+    },
+    onHalfOpen: () => {
+        Console.WriteLine("Circuit à moitié ouvert, test en cours...");
+    }))
+.AddPolicyHandler(Policy.BulkheadAsync<HttpResponseMessage>(maxParallelization: 5, maxQueuingActions: 10));
 
 // Configuration du client HTTP pour le service Produit
 //builder.Services.AddHttpClient("ProduitService")

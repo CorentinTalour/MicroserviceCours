@@ -1,5 +1,5 @@
 using Microsoft.EntityFrameworkCore;
-using Steeltoe.Common.Http.Discovery;
+using Polly;
 using Steeltoe.Discovery.Client;
 using Steeltoe.Discovery.Eureka;
 using WebApplication1.Data;
@@ -20,7 +20,18 @@ builder.Services.AddServiceDiscovery(options => options.UseEureka());
 
 builder.Services.AddHttpClient("commentaire-service", client => {
     client.BaseAddress = new Uri("lb://commentaire-service/");
-}).AddRandomLoadBalancer();
+}).AddRandomLoadBalancer()
+    .AddTransientHttpErrorPolicy(policy => policy.CircuitBreakerAsync(3, TimeSpan.FromSeconds(5),
+        onBreak: (result, timespan) => {
+            Console.WriteLine($"Circuit ouvert pendant {timespan.TotalSeconds} secondes suite à : {result.Exception?.Message}");
+        },
+        onReset: () => {
+            Console.WriteLine("Circuit fermé, tout est rétabli.");
+        },
+        onHalfOpen: () => {
+            Console.WriteLine("Circuit à moitié ouvert, test en cours...");
+        }))
+    .AddPolicyHandler(Policy.BulkheadAsync<HttpResponseMessage>(maxParallelization: 5, maxQueuingActions: 10));
 
 // Configuration du client HTTP pour le service Commentaire
 //builder.Services.AddHttpClient("CommentaireService")
