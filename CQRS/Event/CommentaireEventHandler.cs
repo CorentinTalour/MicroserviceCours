@@ -1,4 +1,3 @@
-using CommentaireService.Event;
 using CQRS.Data;
 using CQRS.Models;
 using Microsoft.EntityFrameworkCore;
@@ -51,7 +50,7 @@ public class CommentaireEventHandler
     [RabbitListener(Binding = "CommentaireDeletedBinding")]
     public void OnCommentaireDeleted(CommentaireDeletedEvent message)
     {
-        Console.WriteLine($"🗑️ Commentaire supprimé reçu : {message.Id}");
+        Console.WriteLine($"Commentaire supprimé reçu : {message.Id}");
 
         using var context = _contextFactory.CreateDbContext();
 

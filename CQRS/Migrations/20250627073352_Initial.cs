@@ -6,7 +6,7 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace CQRS.Migrations
 {
     /// <inheritdoc />
-    public partial class Init : Migration
+    public partial class Initial : Migration
     {
         /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)
@@ -35,22 +35,33 @@ namespace CQRS.Migrations
                     Texte = table.Column<string>(type: "text", nullable: false),
                     Note = table.Column<double>(type: "double precision", nullable: false),
                     ProduitId = table.Column<int>(type: "integer", nullable: false),
-                    ProduitReadModelId = table.Column<int>(type: "integer", nullable: true)
+                    ProduitId1 = table.Column<int>(type: "integer", nullable: true)
                 },
                 constraints: table =>
                 {
                     table.PrimaryKey("PK_Commentaires", x => x.Id);
                     table.ForeignKey(
-                        name: "FK_Commentaires_Produits_ProduitReadModelId",
-                        column: x => x.ProduitReadModelId,
+                        name: "FK_Commentaires_Produits_ProduitId",
+                        column: x => x.ProduitId,
+                        principalTable: "Produits",
+                        principalColumn: "Id",
+                        onDelete: ReferentialAction.Cascade);
+                    table.ForeignKey(
+                        name: "FK_Commentaires_Produits_ProduitId1",
+                        column: x => x.ProduitId1,
                         principalTable: "Produits",
                         principalColumn: "Id");
                 });
 
             migrationBuilder.CreateIndex(
-                name: "IX_Commentaires_ProduitReadModelId",
+                name: "IX_Commentaires_ProduitId",
                 table: "Commentaires",
-                column: "ProduitReadModelId");
+                column: "ProduitId");
+
+            migrationBuilder.CreateIndex(
+                name: "IX_Commentaires_ProduitId1",
+                table: "Commentaires",
+                column: "ProduitId1");
         }
 
         /// <inheritdoc />

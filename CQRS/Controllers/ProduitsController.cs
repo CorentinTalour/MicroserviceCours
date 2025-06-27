@@ -38,4 +38,16 @@ public class ProduitsController : ControllerBase
 
         return Ok(produit);
     }
+    
+    [HttpGet("debug")]
+    public IActionResult DebugTest()
+    {
+        var produits = _context.Produits.ToList();
+
+        return Ok(new
+        {
+            Count = produits.Count,
+            Produits = produits
+        });
+    }
 }

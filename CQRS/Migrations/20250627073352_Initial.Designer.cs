@@ -12,8 +12,8 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace CQRS.Migrations
 {
     [DbContext(typeof(ReadDbContext))]
-    [Migration("20250626141544_Init")]
-    partial class Init
+    [Migration("20250627073352_Initial")]
+    partial class Initial
     {
         /// <inheritdoc />
         protected override void BuildTargetModel(ModelBuilder modelBuilder)
@@ -39,7 +39,7 @@ namespace CQRS.Migrations
                     b.Property<int>("ProduitId")
                         .HasColumnType("integer");
 
-                    b.Property<int?>("ProduitReadModelId")
+                    b.Property<int?>("ProduitId1")
                         .HasColumnType("integer");
 
                     b.Property<string>("Texte")
@@ -48,7 +48,9 @@ namespace CQRS.Migrations
 
                     b.HasKey("Id");
 
-                    b.HasIndex("ProduitReadModelId");
+                    b.HasIndex("ProduitId");
+
+                    b.HasIndex("ProduitId1");
 
                     b.ToTable("Commentaires");
                 });
@@ -80,7 +82,15 @@ namespace CQRS.Migrations
                 {
                     b.HasOne("CQRS.Models.ProduitReadModel", null)
                         .WithMany("Commentaires")
-                        .HasForeignKey("ProduitReadModelId");
+                        .HasForeignKey("ProduitId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("CQRS.Models.ProduitReadModel", "Produit")
+                        .WithMany()
+                        .HasForeignKey("ProduitId1");
+
+                    b.Navigation("Produit");
                 });
 
             modelBuilder.Entity("CQRS.Models.ProduitReadModel", b =>
