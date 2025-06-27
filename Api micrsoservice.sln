@@ -6,6 +6,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "CommentaireService", "Comme
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "CQRS", "CQRS\CQRS.csproj", "{085959B5-B819-46A9-A851-0447092E1ADC}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ApiGateway", "ApiGateway\ApiGateway.csproj", "{48618813-D44F-4680-B0C9-C84385C1C946}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -24,5 +26,9 @@ Global
 		{085959B5-B819-46A9-A851-0447092E1ADC}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{085959B5-B819-46A9-A851-0447092E1ADC}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{085959B5-B819-46A9-A851-0447092E1ADC}.Release|Any CPU.Build.0 = Release|Any CPU
+		{48618813-D44F-4680-B0C9-C84385C1C946}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{48618813-D44F-4680-B0C9-C84385C1C946}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{48618813-D44F-4680-B0C9-C84385C1C946}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{48618813-D44F-4680-B0C9-C84385C1C946}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 EndGlobal
