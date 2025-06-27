@@ -3,9 +3,8 @@
     {
       "DownstreamPathTemplate": "/api/Produits",
       "DownstreamScheme": "http",
-      "DownstreamHostAndPorts": [
-        { "Host": "localhost", "Port": 5185 }
-      ],
+      "ServiceName": "produit-service",
+      "UseServiceDiscovery": true,
       "UpstreamPathTemplate": "/produits",
       "AuthenticationOptions": {
         "AuthenticationProviderKey": "Bearer",
@@ -15,9 +14,8 @@
     {
       "DownstreamPathTemplate": "/api/Commentaires",
       "DownstreamScheme": "http",
-      "DownstreamHostAndPorts": [
-        { "Host": "localhost", "Port": 5242 }
-      ],
+      "ServiceName": "commentaire-service",
+      "UseServiceDiscovery": true,
       "UpstreamPathTemplate": "/commentaires",
       "AuthenticationOptions": {
         "AuthenticationProviderKey": "Bearer",
@@ -27,13 +25,17 @@
     {
       "DownstreamPathTemplate": "/api/{everything}",
       "DownstreamScheme": "http",
-      "DownstreamHostAndPorts": [
-        { "Host": "localhost", "Port": 5208 }
-      ],
+      "ServiceName": "cqrs-service",
+      "UseServiceDiscovery": true,
       "UpstreamPathTemplate": "/cqrs/{everything}"
     }
   ],
   "GlobalConfiguration": {
-    "BaseUrl": "http://localhost:5050"
+    "BaseUrl": "http://localhost:5050",
+    "ServiceDiscoveryProvider": {
+      "Host": "localhost",
+      "Port": 8761,
+      "Type": "Eureka"
+    }
   }
 }

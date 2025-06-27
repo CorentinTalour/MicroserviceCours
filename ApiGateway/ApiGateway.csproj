@@ -10,6 +10,8 @@
         <PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" Version="8.0.17" />
         <PackageReference Include="Microsoft.AspNetCore.OpenApi" Version="8.0.17"/>
         <PackageReference Include="Ocelot" Version="24.0.0" />
+        <PackageReference Include="Ocelot.Provider.Eureka" Version="24.0.0" />
+        <PackageReference Include="Steeltoe.Discovery.ClientCore" Version="3.2.8" />
         <PackageReference Include="Swashbuckle.AspNetCore" Version="6.6.2"/>
     </ItemGroup>
 

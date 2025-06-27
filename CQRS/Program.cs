@@ -2,6 +2,7 @@ using CQRS.Data;
 using CQRS.Event;
 using Microsoft.EntityFrameworkCore;
 using Steeltoe.Connector.RabbitMQ;
+using Steeltoe.Discovery.Client;
 using Steeltoe.Messaging.RabbitMQ.Config;
 using Steeltoe.Messaging.RabbitMQ.Extensions;
 
@@ -22,6 +23,9 @@ builder.Services.AddRabbitAdmin();
 builder.Services.AddRabbitTemplate();
 builder.Services.AddRabbitExchange("ms.produit", ExchangeType.TOPIC);
 
+// Eureka Discovery
+builder.Services.AddDiscoveryClient(builder.Configuration);
+
 // Event Handlers (Singleton attendu par Steeltoe)
 builder.Services.AddSingleton<ProductEventHandler>();
 builder.Services.AddRabbitListeners<ProductEventHandler>();
@@ -29,8 +33,6 @@ builder.Services.AddRabbitListeners<ProductEventHandler>();
 builder.Services.AddSingleton<CommentaireEventHandler>();
 builder.Services.AddRabbitListeners<CommentaireEventHandler>();
 builder.Services.AddRabbitExchange("ms.commentaire", ExchangeType.TOPIC);
-
-builder.Services.AddControllers();
 
 builder.Services.AddControllers()
     .AddJsonOptions(options =>
@@ -41,6 +43,9 @@ builder.Services.AddControllers()
 var app = builder.Build();
 
 app.MapControllers();
+
+// Activer Eureka
+app.UseDiscoveryClient();
 
 // Swagger
 if (app.Environment.IsDevelopment())
