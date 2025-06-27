@@ -47,6 +47,11 @@ builder.Services.AddSingleton<ProduitEventHandler>();
 builder.Services.AddRabbitListeners<ProduitEventHandler>();
 builder.Services.AddRabbitExchange("ms.produit", ExchangeType.TOPIC);
 
+
+builder.Services.AddSingleton<CommentaireEventHandler>();
+builder.Services.AddRabbitListeners<CommentaireEventHandler>();
+builder.Services.AddRabbitExchange("ms.commentaire", ExchangeType.TOPIC);
+
 // Configuration du client HTTP pour le service Produit
 //builder.Services.AddHttpClient("ProduitService")
 //    .AddServiceDiscovery();

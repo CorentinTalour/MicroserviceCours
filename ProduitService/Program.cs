@@ -42,8 +42,8 @@ builder.Services.AddRabbitServices(true);
 builder.Services.AddRabbitAdmin();
 builder.Services.AddRabbitTemplate();
 
-builder.Services.AddSingleton<CustomEventHandler>();
-builder.Services.AddRabbitListeners<CustomEventHandler>();
+builder.Services.AddSingleton<DeleteEventHandler>();
+builder.Services.AddRabbitListeners<DeleteEventHandler>();
 
 builder.Services.AddRabbitExchange("ms.produit", ExchangeType.TOPIC);
 

@@ -1,11 +1,13 @@
 using System.Text.Json;
 using CommentaireService.Data;
 using CommentaireService.Dtos;
+using CommentaireService.Event;
 using CommentaireService.Models;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Polly;
 using Polly.CircuitBreaker;
+using Steeltoe.Messaging.RabbitMQ.Core;
 
 namespace CommentaireService.Controllers;
 
@@ -15,11 +17,13 @@ public class CommentairesController : ControllerBase
 {
     private readonly AppDbContext _context;
     private readonly HttpClient _httpClient;
+    private readonly RabbitTemplate _rabbitTemplate;
 
-    public CommentairesController(AppDbContext context, IHttpClientFactory httpClientFactory)
+    public CommentairesController(AppDbContext context, IHttpClientFactory httpClientFactory, RabbitTemplate rabbitTemplate)
     {
         _context = context;
         _httpClient = httpClientFactory.CreateClient("produit-service");
+        _rabbitTemplate = rabbitTemplate;
     }
 
     // GET: api/commentaires
@@ -175,6 +179,14 @@ public class CommentairesController : ControllerBase
 
         _context.Commentaires.Add(commentaire);
         await _context.SaveChangesAsync();
+        
+        _rabbitTemplate.ConvertAndSend("ms.commentaire", "commentaire.created", new CommentaireCreatedEvent
+        {
+            Id = commentaire.Id,
+            Texte = commentaire.Texte,
+            Note = commentaire.Note,
+            ProduitId = commentaire.ProduitId
+        });
 
         return CreatedAtAction(nameof(GetCommentairesByProduit), new { produitId = produitId }, commentaire);
     }
@@ -190,6 +202,12 @@ public class CommentairesController : ControllerBase
 
         _context.Commentaires.Remove(commentaire);
         await _context.SaveChangesAsync();
+        
+        _rabbitTemplate.ConvertAndSend("ms.commentaire", "commentaire.deleted", new CommentaireDeletedEvent
+        {
+            Id = commentaire.Id,
+            ProduitId = commentaire.ProduitId
+        });
 
         return NoContent();
     }

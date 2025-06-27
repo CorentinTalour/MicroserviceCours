@@ -139,6 +139,18 @@ public class ProduitsController : ControllerBase
 
         await _context.SaveChangesAsync();
 
+        // Envoyer l'événement RabbitMQ
+        var message = new ProduitUpdatedEvent
+        {
+            Id = produit.Id,
+            Nom = produit.Nom,
+            Prix = produit.Prix,
+            Notable = produit.Notable,
+            Source = "ProduitService"
+        };
+
+        _rabbitTemplate.ConvertAndSend("ms.produit", "produit.updated", message);
+
         return NoContent();
     }
 

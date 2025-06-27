@@ -3,7 +3,7 @@ using WebApplication1.Models;
 
 namespace WebApplication1.Event;
 
-public class CustomEventHandler
+public class DeleteEventHandler
 {
     [DeclareQueue(Name = "ms.produit.creation.queue")]
     [DeclareQueueBinding(

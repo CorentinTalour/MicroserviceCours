@@ -1,16 +1,18 @@
 using CommentaireService.Data;
-using Microsoft.EntityFrameworkCore;
 using Steeltoe.Messaging.RabbitMQ.Attributes;
+using Steeltoe.Messaging.RabbitMQ.Core;
 
 namespace CommentaireService.Event;
 
 public class ProduitEventHandler
 {
     private readonly IServiceScopeFactory _scopeFactory;
+    private readonly RabbitTemplate _rabbitTemplate;
 
-    public ProduitEventHandler(IServiceScopeFactory scopeFactory)
+    public ProduitEventHandler(IServiceScopeFactory scopeFactory, RabbitTemplate rabbitTemplate)
     {
         _scopeFactory = scopeFactory;
+        _rabbitTemplate = rabbitTemplate;
     }
 
     [DeclareQueue(Name = "ms.produit.deletion.queue")]
@@ -36,6 +38,19 @@ public class ProduitEventHandler
                 dbContext.SaveChanges();
 
                 Console.WriteLine($"Commentaires supprimés pour le produit {message.Id}");
+
+                // 🔥 On publie un événement RabbitMQ pour chaque commentaire supprimé
+                foreach (var commentaire in commentaires)
+                {
+                    var deleteEvent = new CommentaireDeletedEvent
+                    {
+                        Id = commentaire.Id,
+                        ProduitId = commentaire.ProduitId
+                    };
+
+                    _rabbitTemplate.ConvertAndSend("ms.commentaire", "commentaire.deleted", deleteEvent);
+                    Console.WriteLine($"📤 Event commentaire.deleted envoyé pour le commentaire {commentaire.Id}");
+                }
             }
             else
             {
